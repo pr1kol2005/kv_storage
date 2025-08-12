@@ -5,5 +5,5 @@ target_include_directories(kv_storage
 )
 
 target_link_libraries(kv_storage
-  INTERFACE absl::btree absl::flat_hash_map
+  INTERFACE absl::btree absl::node_hash_map
 )
