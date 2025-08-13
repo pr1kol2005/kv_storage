@@ -209,7 +209,8 @@ class KVStorage {
 
     auto node_handle = key_index_.extract(entry_it);
 
-    return std::make_optional<OutputEntry>(std::move(node_handle.key()), std::move(node_handle.mapped().value));
+    return std::make_optional<OutputEntry>(
+        std::move(node_handle.key()), std::move(node_handle.mapped().value));
   }
 
  private:
@@ -222,17 +223,20 @@ class KVStorage {
   // O(logN) time complexity.
   void set_impl(Key key, Value value, Seconds ttl, TimePoint now) {
     std::optional<TimePoint> new_expiry =
-        (ttl == kNoExpiry) ? std::nullopt : std::make_optional<TimePoint>(now + static_cast<Duration>(ttl));
+        (ttl == kNoExpiry)
+            ? std::nullopt
+            : std::make_optional<TimePoint>(now + static_cast<Duration>(ttl));
 
-    auto [entry_it, inserted] = key_index_.try_emplace(
-        std::move(key), std::move(value), new_expiry,
-        sorted_index_.end(), ttl_index_.end());
+    auto [entry_it, inserted] =
+        key_index_.try_emplace(std::move(key), std::move(value), new_expiry,
+                               sorted_index_.end(), ttl_index_.end());
 
     if (inserted) {
-        entry_it->second.sorted_it = sorted_index_.emplace(entry_it->first).first;
-        if (new_expiry.has_value()) {
-          entry_it->second.ttl_it = ttl_index_.emplace(new_expiry.value(), entry_it->first);
-        }
+      entry_it->second.sorted_it = sorted_index_.emplace(entry_it->first).first;
+      if (new_expiry.has_value()) {
+        entry_it->second.ttl_it =
+            ttl_index_.emplace(new_expiry.value(), entry_it->first);
+      }
     }
 
     if (!inserted) {
@@ -246,7 +250,8 @@ class KVStorage {
       }
 
       if (new_expiry.has_value()) {
-        entry_it->second.ttl_it = ttl_index_.emplace(new_expiry.value(), entry_it->first);
+        entry_it->second.ttl_it =
+            ttl_index_.emplace(new_expiry.value(), entry_it->first);
       } else {
         entry_it->second.ttl_it = ttl_index_.end();
       }
