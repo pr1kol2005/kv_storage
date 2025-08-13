@@ -4,7 +4,7 @@ echo "Launching clang-format check..."
 
 FAILED=0
 
-FILES=$(find src tests -type f \( -name '*.cpp' -o -name '*.hpp' \))
+FILES=$(find include tests -type f \( -name '*.cpp' -o -name '*.hpp' \))
 
 for file in $FILES; do
   if ! diff -u "$file" <(clang-format --style=Google "$file"); then
