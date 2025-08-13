@@ -1,3 +1,4 @@
+#include <chrono>
 #include <concepts>
 #include <cstdint>
 #include <map>
@@ -5,6 +6,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -17,7 +19,7 @@ concept KVClock = std::default_initializable<C> && std::movable<C> && requires {
   typename C::duration;
 
   { C::now() } -> std::same_as<typename C::time_point>;
-  requires std::convertible_to<uint32_t, typename C::duration>;
+  requires std::convertible_to<std::chrono::seconds, typename C::duration>;
   {
     std::declval<typename C::time_point>() +
         std::declval<typename C::duration>()
@@ -37,10 +39,10 @@ class KVStorage {
   using Duration = typename Clock::duration;
   using TimePoint = typename Clock::time_point;
 
-  using TtlSeconds = uint32_t;
-  static constexpr TtlSeconds kNoExpiry = 0;
+  using Seconds = std::chrono::seconds;
+  static constexpr Seconds kNoExpiry{0};
 
-  using InputEntry = std::tuple<Key, Value, TtlSeconds>;
+  using InputEntry = std::tuple<Key, Value, uint32_t>;
   using OutputEntry = std::pair<Key, Value>;
 
   // Важно, чтобы итераторы не инвалидировались при всех операциях над
@@ -73,11 +75,25 @@ class KVStorage {
           ttl_it(ttl_it) {}
   };
 
+  // Кастомный хэш для поддержки heterogenous lookup.
+  struct string_hash {
+    using hash_type = std::hash<std::string_view>;
+    using is_transparent = void;
+
+    std::size_t operator()(const char* str) const { return hash_type{}(str); }
+    std::size_t operator()(std::string_view str) const {
+      return hash_type{}(str);
+    }
+    std::size_t operator()(const std::string& str) const {
+      return hash_type{}(str);
+    }
+  };
+
   // Важно чтобы указатели не инвалидировались при любых операциях, чтобы
   // string_view в других контейнерах оставались валидными. Поэтому
-  // unordered_map — подходящий выбор. Также удобно, что с C++20 поддерживается
-  // heterogenous lookup.
-  using KeyIndex = std::unordered_map<Key, ValueMetadata>;
+  // unordered_map — подходящий выбор.
+  using KeyIndex =
+      std::unordered_map<Key, ValueMetadata, string_hash, std::equal_to<>>;
 
  public:
   // Инициализирует хранилище переданным множеством записей. Размер span может
@@ -93,7 +109,8 @@ class KVStorage {
     key_index_.reserve(entries.size());
 
     for (auto& [key, value, ttl] : entries) {
-      set_impl(std::move(key), std::move(value), ttl, now);
+      set_impl(std::move(key), std::move(value), static_cast<Seconds>(ttl),
+               now);
     }
   }
 
@@ -103,10 +120,10 @@ class KVStorage {
   // Если ttl == 0, то время жизни записи - бесконечность, иначе запись должна
   // перестать быть доступной через ttl секунд. Безусловно обновляет ttl записи.
   // O(logN) time complexity.
-  void set(Key key, Value value, TtlSeconds ttl) {
+  void set(Key key, Value value, uint32_t ttl) {
     TimePoint now = Clock::now();
 
-    set_impl(std::move(key), std::move(value), ttl, now);
+    set_impl(std::move(key), std::move(value), static_cast<Seconds>(ttl), now);
   }
 
   // Удаляет запись по ключу кеу.
@@ -121,7 +138,7 @@ class KVStorage {
 
     sorted_index_.erase(entry_it->second.sorted_it);
     if (entry_it->second.expiry.has_value()) {
-      ttl_index_.erase(entry_it->second.ttl_index_it);
+      ttl_index_.erase(entry_it->second.ttl_it);
     }
     key_index_.erase(entry_it);
 
@@ -192,7 +209,7 @@ class KVStorage {
 
     auto node_handle = key_index_.extract(entry_it);
 
-    return {std::move(node_handle.key()), std::move(node_handle.value().value)};
+    return std::make_optional<OutputEntry>(std::move(node_handle.key()), std::move(node_handle.mapped().value));
   }
 
  private:
@@ -203,16 +220,20 @@ class KVStorage {
 
   // Добавляет запись в хранилище.
   // O(logN) time complexity.
-  void set_impl(Key key, Value value, TtlSeconds ttl, TimePoint now) {
-    // TODO : implement me, O(logN)
+  void set_impl(Key key, Value value, Seconds ttl, TimePoint now) {
     std::optional<TimePoint> new_expiry =
-        (ttl == kNoExpiry) ? std::nullopt : (now + static_cast<Duration>(ttl));
+        (ttl == kNoExpiry) ? std::nullopt : std::make_optional<TimePoint>(now + static_cast<Duration>(ttl));
 
     auto [entry_it, inserted] = key_index_.try_emplace(
         std::move(key), std::move(value), new_expiry,
-        sorted_index_.emplace(key),
-        (new_expiry.has_value() ? ttl_index_.emplace(new_expiry, key)
-                                : ttl_index_.end()));
+        sorted_index_.end(), ttl_index_.end());
+
+    if (inserted) {
+        entry_it->second.sorted_it = sorted_index_.emplace(entry_it->first).first;
+        if (new_expiry.has_value()) {
+          entry_it->second.ttl_it = ttl_index_.emplace(new_expiry.value(), entry_it->first);
+        }
+    }
 
     if (!inserted) {
       entry_it->second.value = std::move(value);
@@ -225,7 +246,7 @@ class KVStorage {
       }
 
       if (new_expiry.has_value()) {
-        entry_it->second.ttl_it = ttl_index_.emplace(new_expiry, key);
+        entry_it->second.ttl_it = ttl_index_.emplace(new_expiry.value(), entry_it->first);
       } else {
         entry_it->second.ttl_it = ttl_index_.end();
       }
