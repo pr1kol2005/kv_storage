@@ -73,6 +73,10 @@ class KVStorage {
           expiry(expiry),
           sorted_it(sorted_it),
           ttl_it(ttl_it) {}
+
+    bool isExpired(TimePoint now) const {
+      return expiry.has_value() && expiry <= now;
+    }
   };
 
   // Кастомный хэш для поддержки heterogenous lookup.
@@ -155,8 +159,7 @@ class KVStorage {
       return std::nullopt;
     }
 
-    auto expiry = entry_it->second.expiry;
-    if (expiry.has_value() && expiry <= Clock::now()) {
+    if (entry_it->second.isExpired(Clock::now())) {
       return std::nullopt;
     }
 
@@ -179,8 +182,7 @@ class KVStorage {
     while (first_it != sorted_index_.end() && result.size() < count) {
       auto entry_it = key_index_.find(*first_it);
 
-      auto expiry = entry_it->second.expiry;
-      if (!expiry.has_value() || !(expiry <= now)) {
+      if (!entry_it->second.isExpired(now)) {
         result.emplace_back(entry_it->first, entry_it->second.value);
       }
 
@@ -237,24 +239,23 @@ class KVStorage {
         entry_it->second.ttl_it =
             ttl_index_.emplace(new_expiry.value(), entry_it->first);
       }
+      return;
     }
 
-    if (!inserted) {
-      entry_it->second.value = std::move(value);
+    entry_it->second.value = std::move(value);
 
-      auto old_expiry = entry_it->second.expiry;
-      entry_it->second.expiry = new_expiry;
+    auto old_expiry = entry_it->second.expiry;
+    entry_it->second.expiry = new_expiry;
 
-      if (old_expiry.has_value()) {
-        ttl_index_.erase(entry_it->second.ttl_it);
-      }
+    if (old_expiry.has_value()) {
+      ttl_index_.erase(entry_it->second.ttl_it);
+    }
 
-      if (new_expiry.has_value()) {
-        entry_it->second.ttl_it =
-            ttl_index_.emplace(new_expiry.value(), entry_it->first);
-      } else {
-        entry_it->second.ttl_it = ttl_index_.end();
-      }
+    if (new_expiry.has_value()) {
+      entry_it->second.ttl_it =
+          ttl_index_.emplace(new_expiry.value(), entry_it->first);
+    } else {
+      entry_it->second.ttl_it = ttl_index_.end();
     }
   }
 };
