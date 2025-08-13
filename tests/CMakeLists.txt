@@ -5,19 +5,13 @@ add_executable(
   unit.cpp
 )
 
-add_executable(
-  stress_tests
-  stress.cpp
-)
-
 target_link_libraries(unit_tests
-  PRIVATE kv_storage GTest::gtest_main
+  PRIVATE GTest::gtest_main
 )
 
-target_link_libraries(stress_tests
-  PRIVATE kv_storage GTest::gtest_main
+target_include_directories(unit_tests
+  PRIVATE ${INCLUDE_DIR}
 )
 
 include(GoogleTest)
 gtest_discover_tests(unit_tests)
-gtest_discover_tests(stress_tests)

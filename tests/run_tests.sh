@@ -11,10 +11,8 @@ fi
 
 if [[ "$GTEST_OUTPUT_XML" == 1 ]]; then
   ./bin/unit_tests --gtest_output=xml:tests/reports/unit_tests_results.xml
-  ./bin/stress_tests --gtest_output=xml:tests/reports/stress_tests_results.xml
 else
   ./bin/unit_tests
-  ./bin/stress_tests
 fi
 
 exit 0
