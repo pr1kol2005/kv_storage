@@ -1,0 +1,68 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+
+permissions:
+  checks: write
+  contents: read
+
+jobs:
+  test-format:
+    name: Test Format
+    runs-on: ubuntu-latest
+    container: gcc:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Git & clang-format
+        run: apt-get update && apt-get install -y git clang-format
+
+      - name: Make format script executable
+        run: chmod +x scripts/check_format.sh
+
+      - name: Run format check
+        run: ./scripts/check_format.sh
+
+  test-code:
+    name: Build and Run Tests
+    runs-on: ubuntu-latest
+    container: gcc:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install CMake & Git
+        run: apt-get update && apt-get install -y cmake git
+
+      - name: Trust Git directory
+        run: git config --global --add safe.directory '*'
+
+      - name: Make build script executable
+        run: chmod +x scripts/build_project.sh
+
+      - name: Build project (BUILD_TESTS=ON)
+        run: ./scripts/build_project.sh BUILD_TESTS=ON
+
+      - name: Make test runner executable
+        run: chmod +x scripts/run_tests.sh
+
+      - name: Run tests
+        run: ./scripts/run_tests.sh --output-xml
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: tests/reports/*.xml
+
+      - name: Publish test reports
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: 'tests/reports/*.xml'
+          fail_on_failure: true
