@@ -49,10 +49,10 @@ jobs:
         run: ./scripts/build_project.sh BUILD_TESTS=ON
 
       - name: Make test runner executable
-        run: chmod +x tests/run_tests.sh
+        run: chmod +x scripts/run_tests.sh
 
       - name: Run tests
-        run: ./tests/run_tests.sh --output-xml
+        run: ./scripts/run_tests.sh --output-xml
 
       - name: Upload test reports
         if: always()

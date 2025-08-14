@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ./tests/run_tests.sh --output-xml
+# ./scripts/run_tests.sh --output-xml
 
 GTEST_OUTPUT_XML=0
 
@@ -11,8 +11,12 @@ fi
 
 if [[ "$GTEST_OUTPUT_XML" == 1 ]]; then
   ./bin/unit_tests --gtest_output=xml:tests/reports/unit_tests_results.xml
+  ./bin/time_tests --gtest_output=xml:tests/reports/time_tests_results.xml
+  ./bin/stress_tests --gtest_output=xml:tests/reports/stress_tests_results.xml
 else
   ./bin/unit_tests
+  ./bin/time_tests
+  ./bin/stress_tests
 fi
 
 exit 0
